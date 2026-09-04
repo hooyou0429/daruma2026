@@ -376,6 +376,9 @@ let student = null;         // {id, name}
 let currentSentence = null; // {jp, ko, plain, id} — id is null for custom(직접입력) sentences
 let recognition = null;
 let listening = false;
+let wrongStreak = 0;        // 현재 문장에서 연속으로 틀린 횟수
+const skippedIds = new Set(); // 3회 연속 오답으로 건너뛴 문장 id (세션 동안만 유지)
+const WRONG_STREAK_LIMIT = 3;
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -582,6 +585,9 @@ function markPassed(id){
 function findFirstUnpassed(cat){
   const list = getSentencesForCategory(cat);
   const passed = getPassedSet();
+  const candidate = list.find(item => !passed.has(sentenceId(item)) && !skippedIds.has(sentenceId(item)));
+  if(candidate) return candidate;
+  // 이번 세션에서 건너뛴 문장만 남았다면, 다시 처음부터 도전할 수 있도록 순환시킨다.
   return list.find(item => !passed.has(sentenceId(item))) || null;
 }
 function countPassedInCategory(cat){
@@ -660,6 +666,7 @@ $("#btnRetryCategory").addEventListener("click", () => {
 
 function setCurrentSentence(jpHtml, ko, id){
   currentSentence = { jp: jpHtml, ko: ko || "", plain: stripRuby(jpHtml), id: id || null };
+  wrongStreak = 0;
   $("#curJp").innerHTML = jpHtml;
   $("#curKo").textContent = ko || "";
   $("#resultArea").innerHTML = "";
@@ -768,16 +775,34 @@ function handleResult(heardText){
   if(pass && isTracked){
     markPassed(currentSentence.id);
     renderProgress($("#selCategory").value);
+    wrongStreak = 0;
   }
 
-  renderResult(pass, score, diffHtml, heardText, isTracked);
+  let autoAdvance = false;
+  if(!pass){
+    wrongStreak++;
+    if(isTracked && wrongStreak >= WRONG_STREAK_LIMIT){
+      skippedIds.add(currentSentence.id);
+      wrongStreak = 0;
+      autoAdvance = true;
+    }
+  }
+
+  renderResult(pass, score, diffHtml, heardText, isTracked, autoAdvance);
+
+  if(autoAdvance){
+    setTimeout(loadCategory, 1600);
+  }
 }
 
-function renderResult(pass, score, diffHtml, heardText, isTracked){
+function renderResult(pass, score, diffHtml, heardText, isTracked, autoAdvance){
   const cls = pass ? "pass" : "retry";
-  const label = pass ? "✅ 통과!" : "🔁 다시 도전!";
+  const label = pass ? "✅ 통과!" : (autoAdvance ? "❌ 오답 (3회 연속)" : "🔁 다시 도전!");
   const advanceBtn = (pass && isTracked)
     ? `<button class="btn btn-primary" id="btnAdvance" style="margin-top:14px;">다음 문장 보기 →</button>`
+    : "";
+  const autoAdvanceNote = autoAdvance
+    ? `<div class="small-note" style="color:var(--bad);font-weight:700;">3번 연속 오답이라 오답으로 기록하고 잠시 후 다음 문장으로 넘어갈게요...</div>`
     : "";
   $("#resultArea").innerHTML = `
     <div class="result-card ${cls}">
@@ -790,6 +815,7 @@ function renderResult(pass, score, diffHtml, heardText, isTracked){
       <div style="font-size:14px;color:var(--sub);">${heardText || "(인식된 내용 없음)"}</div>
       <div class="small-note">초록색: 정답과 일치 · 빨간색: 정답과 다름 (기준: ${CONFIG.PASS_THRESHOLD}% 이상 통과)</div>
       <div class="sync-note"><span class="dot-sync ${CONFIG.APPS_SCRIPT_URL ? "pending" : ""}" id="syncDot"></span><span id="syncText">${CONFIG.APPS_SCRIPT_URL ? "구글시트로 전송 중..." : "이 기기에만 저장됨 (구글시트 연동 미설정)"}</span></div>
+      ${autoAdvanceNote}
       ${advanceBtn}
     </div>
   `;
