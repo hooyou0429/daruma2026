@@ -245,10 +245,6 @@
           <span id="progressText">0 / 0 문장 통과</span>
           <span class="progress-bar"><span class="progress-bar-fill" id="progressBarFill" style="width:0%;"></span></span>
         </div>
-
-        <label for="inpCustom" style="margin-top:16px;">또는 직접 문장 입력하기 (선택)</label>
-        <textarea id="inpCustom" rows="2" placeholder="연습하고 싶은 일본어 문장을 입력하세요"></textarea>
-        <button class="btn btn-ghost" id="btnUseCustom" style="margin-top:8px;">이 문장으로 연습하기</button>
       </div>
 
       <div class="card" id="practiceCard">
@@ -672,14 +668,6 @@ function setCurrentSentence(jpHtml, ko, id){
   $("#resultArea").innerHTML = "";
   $("#micStatus").textContent = "마이크를 눌러 따라 말해보세요";
 }
-
-$("#btnUseCustom").addEventListener("click", () => {
-  const v = $("#inpCustom").value.trim();
-  if(!v){ alert("연습할 문장을 입력해 주세요."); return; }
-  $("#practiceCard").style.display = "";
-  $("#completeCard").style.display = "none";
-  setCurrentSentence(v, "", null);
-});
 
 /* =========================================================================
    모범 발음 듣기 (TTS)
