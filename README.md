@@ -59,7 +59,7 @@
 
 ## 6. 현재 상태
 
-- **코드 관리**: GitHub 저장소 [hooyou0429/daruma2026](https://github.com/hooyou0429/daruma2026) (`main` 브랜치)로 관리합니다. 선생님 PC의 `C:\일본어연습\` 폴더와 별도로, 이 저장소를 클론한 작업 폴더(`C:\Project\daruma`)에서도 동일한 파일(`index.html`, `Questions.js`, `AppsScript_Code.gs`, `다루마.png`, `작업_리포트.md`, `설정_가이드.md`)을 다룰 수 있습니다.
+- **코드 관리**: GitHub 저장소 [hooyou0429/daruma2026](https://github.com/hooyou0429/daruma2026) (`main` 브랜치)로 관리합니다. 선생님 PC의 `C:\일본어연습\` 폴더와 별도로, 이 저장소를 클론한 작업 폴더(`C:\Project\daruma`)에서도 동일한 파일(`index.html`, `Questions.js`, `AppsScript_Code.gs`, `다루마.png`, `README.md`, `설정_가이드.md`)을 다룰 수 있습니다.
 - **구글 스프레드시트 연동**: 점수 기록, "문제은행"·"한자읽기" 탭 실시간 연동 모두 정상 동작 중입니다. `AppsScript_Code.gs`를 수정한 경우에는 Apps Script 편집기에서 새 버전으로 재배포해야 반영됩니다.
 - **배포**: 이제 Netlify 사이트가 위 GitHub 저장소와 연결되어 있어, `main` 브랜치에 git push하면 **자동으로 재배포**됩니다(드래그앤드롭 수동 업로드 방식은 더 이상 사용하지 않음). 정확한 Netlify 사이트 주소는 대화 중에 공유되지 않아 별도로 기록되어 있지 않습니다 — 필요하시면 알려주세요.
 
