@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>다루마!! 일본어 말하기 연습</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jua&family=Gaegu:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script>
+  /* 로그인되어 있지 않으면 화면이 잠깐이라도 보이기 전에 바로 로그인 화면으로 이동 */
+  try{
+    if(!localStorage.getItem("jpk_student_v1")){ location.replace("index.html"); }
+  }catch(e){}
+</script>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand"><span class="dot"></span>다루마!!</div>
+    <div class="who" id="whoBadge"></div>
+  </header>
+
+  <nav class="tabs">
+    <button id="tabPractice" class="active">연습하기</button>
+    <button id="tabHistory">내 기록</button>
+  </nav>
+
+  <!-- ---- 연습 탭 ---- -->
+  <div id="panel-practice">
+    <div class="card" id="micWarnCard" style="display:none;">
+      <div class="warn-box" id="micWarnText"></div>
+    </div>
+
+    <div class="card">
+      <div class="top-actions"><button class="link-btn" id="btnLogout">다른 학생으로 전환</button></div>
+      <h2>카테고리 선택</h2>
+      <select class="cat-select" id="selCategory"></select>
+      <div class="progress-line">
+        <span id="progressText">0 / 0 문장 통과</span>
+        <span class="progress-bar"><span class="progress-bar-fill" id="progressBarFill" style="width:0%;"></span></span>
+      </div>
+    </div>
+
+    <div class="card" id="practiceCard">
+      <div class="sentence-box">
+        <div class="sentence-jp" id="curJp">문장을 선택해 주세요</div>
+        <div class="sentence-ko" id="curKo"></div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-outline" id="btnListen">🔊 모범 발음 듣기</button>
+      </div>
+
+      <div class="mic-area">
+        <button class="mic-btn" id="btnMic">🎤</button>
+        <div class="mic-status" id="micStatus">마이크를 눌러 따라 말해보세요</div>
+      </div>
+
+      <div id="resultArea"></div>
+    </div>
+
+    <div class="card complete-card" id="completeCard" style="display:none;">
+      <div class="complete-emoji">🎉</div>
+      <h2 id="completeTitle">카테고리를 모두 통과했어요!</h2>
+      <p class="complete-desc" id="completeDesc">정말 잘했어요! 다음 카테고리에 도전해볼까요?</p>
+      <button class="btn btn-primary" id="btnNextCategory">다음 카테고리로 이동 →</button>
+      <button class="btn btn-ghost" id="btnRetryCategory" style="margin-top:10px;">이 카테고리 다시 연습하기</button>
+    </div>
+  </div>
+
+  <!-- ---- 기록 탭 ---- -->
+  <div id="panel-history" style="display:none;">
+    <div class="card">
+      <h2>나의 연습 기록</h2>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="v" id="statCount">0</div><div class="l">총 연습 횟수</div></div>
+        <div class="stat-box"><div class="v" id="statAvg">0%</div><div class="l">평균 점수</div></div>
+        <div class="stat-box"><div class="v" id="statBest">0%</div><div class="l">최고 점수</div></div>
+      </div>
+      <canvas id="trendCanvas" height="140"></canvas>
+      <div id="historyTableWrap"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- 연습 문장(문제) 목록은 questions.js에서 불러옵니다. 반드시 index.html과 같은 폴더에 두세요. -->
+<script src="questions.js"></script>
+
+<script>
+(function(){
+"use strict";
+
+/* =========================================================================
+   ▼▼▼ 선생님 설정 영역 (SETTINGS) ▼▼▼
+   이 블록의 값만 바꾸면 앱 동작을 조정할 수 있습니다.
+   ========================================================================= */
+const CONFIG = {
+  // 1) Google Apps Script 웹앱 배포 후 발급되는 URL을 아래 따옴표 안에 붙여넣으세요.
+  //    (설정 가이드 문서 참고) 비워두면 구글시트 전송 없이 브라우저에만 기록이 저장됩니다.
+  APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbxWez6QbJUDyUmBMSYqRfmhwI0I-8XwdIQWOw4CRKEzCA2GuaAsmgAgfom8g589A179sg/exec",
+
+  // 2) 통과 기준 점수(%) - 이 점수 이상이면 '통과'로 표시됩니다.
+  PASS_THRESHOLD: 80,
+
+  // 3) 앱 제목 등 표시 문구를 바꾸고 싶다면 위 <title>과 .brand 텍스트를 수정하세요.
+};
+
+/* 연습 문장 목록은 questions.js 파일이 기본값(오프라인 대비용)입니다.
+   Google Apps Script(구글시트의 "문제은행" 탭)에서 실시간으로 불러오는 데 성공하면
+   그 내용으로 자동 교체되어, questions.js를 건드리거나 Netlify에 재배포하지 않아도
+   구글시트만 수정하면 학생 화면에 바로 반영됩니다. 인터넷 문제 등으로 불러오지 못하면
+   questions.js의 내용이 계속 사용됩니다. */
+let ACTIVE_SENTENCES = (typeof SENTENCES !== "undefined" ? SENTENCES : []);
+
+/* 4) 채점용 한자→히라가나 보정 사전
+   음성 인식은 학생이 한자 없이 히라가나로만 말해도, 결과 텍스트를 한자로 반환하는 경우가 많습니다
+   (예: "あした"라고 말해도 인식 결과는 "明日"로 나옴). questions.js의 <ruby>한자<rt>읽기</rt></ruby>
+   표기가 있는 단어는 자동으로 이 사전에 채워지므로 따로 추가할 필요가 없습니다.
+   아래 목록은 오프라인 대비용 기본값이며, Google Apps Script(구글시트의 "한자읽기" 탭)에서
+   실시간으로 불러오는 데 성공하면 그 내용으로 자동 교체됩니다(문제은행과 동일한 방식).
+   즉 앞으로는 이 코드를 직접 건드리지 않아도, 구글시트 "한자읽기" 탭에 "한자":"히라가나" 행을
+   추가/수정하기만 하면 바로 반영됩니다. */
+const READING_OVERRIDES_DEFAULT = {
+  // 긴 단어(구)일수록 위에 먼저 매칭되도록 하기 위해 이 사전은 실제 정렬과 무관하게
+  // 코드에서 자동으로 "글자 수가 긴 것부터" 우선 적용합니다. 순서는 신경쓰지 않아도 됩니다.
+  "明日": "あした",
+  "私": "わたし",
+  "韓国人": "かんこくじん",
+  "高校生": "こうこうせい",
+  "お願いします": "おねがいします",
+  "何ですか": "なんですか",
+  "何が": "なにが",
+  "得意": "とくい",
+  "料理": "りょうり",
+  "数学": "すうがく",
+  "上手": "じょうず",
+  "お喋り": "おしゃべり",
+  "旅行": "りょこう",
+  "音楽": "おんがく",
+  "食べ物": "たべもの",
+  "梅干し": "うめぼし",
+  "苦手": "にがて",
+  "動物": "どうぶつ",
+  "猫": "ねこ",
+  "好き": "すき",
+  "久しぶり": "ひさしぶり",
+  "行ってきます": "いってきます",
+  "お邪魔します": "おじゃまします",
+  "初めまして": "はじめまして",
+  "お帰りなさい": "おかえりなさい",
+  "ご馳走様でした": "ごちそうさまでした",
+};
+let ACTIVE_READING_OVERRIDES = Object.assign({}, READING_OVERRIDES_DEFAULT);
+
+/* =========================================================================
+   상태 및 저장소
+   ========================================================================= */
+const LS_STUDENT = "jpk_student_v1";
+const LS_HISTORY_PREFIX = "jpk_history_v1_"; // + studentKey
+const LS_PENDING = "jpk_pending_sync_v1";
+const LS_PASSED_PREFIX = "jpk_passed_v1_"; // + studentKey
+
+let student = null;         // {id, name}
+let currentSentence = null; // {jp, ko, plain, id} — id is null for custom(직접입력) sentences
+let recognition = null;
+let listening = false;
+let wrongStreak = 0;        // 현재 문장에서 연속으로 틀린 횟수
+const skippedIds = new Set(); // 3회 연속 오답으로 건너뛴 문장 id (세션 동안만 유지)
+const WRONG_STREAK_LIMIT = 3;
+
+const $ = (sel) => document.querySelector(sel);
+
+/* ---- 유틸: ruby 태그 제거하고 순수 텍스트만 추출 ---- */
+function stripRuby(html){
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  div.querySelectorAll("rt").forEach(rt => rt.remove());
+  return div.textContent.trim();
+}
+
+/* ---- 한자→히라가나 보정 사전 만들기: questions.js의 모든 <ruby>한자<rt>읽기</rt></ruby>를
+   자동 수집 + READING_OVERRIDES 병합. 채점 시 한자 표기와 히라가나 표기를 같은 것으로 취급하기 위함 ---- */
+function buildReadingMap(){
+  const map = Object.assign({}, ACTIVE_READING_OVERRIDES);
+  const rubyRe = /<ruby>([^<]+)<rt>([^<]+)<\/rt><\/ruby>/g;
+  ACTIVE_SENTENCES.forEach(item => {
+    let m;
+    rubyRe.lastIndex = 0;
+    while((m = rubyRe.exec(item.jp))){
+      const kanji = m[1], reading = m[2];
+      if(!map[kanji]) map[kanji] = reading;
+    }
+  });
+  return map;
+}
+let READING_MAP = buildReadingMap();
+let READING_MAP_KEYS = Object.keys(READING_MAP).sort((a,b) => b.length - a.length);
+function refreshReadingMap(){
+  READING_MAP = buildReadingMap();
+  READING_MAP_KEYS = Object.keys(READING_MAP).sort((a,b) => b.length - a.length);
+}
+
+/* ---- 한자를 위 사전을 이용해 히라가나로 치환 (긴 단어부터 우선 치환) ---- */
+function toReadingForm(text){
+  if(!text) return text;
+  let result = text;
+  for(const k of READING_MAP_KEYS){
+    if(result.indexOf(k) !== -1){
+      result = result.split(k).join(READING_MAP[k]);
+    }
+  }
+  return result;
+}
+
+/* ---- 정규화: 채점 전에 한자→히라가나 치환, 공백/구두점 제거, NFKC 정규화 ---- */
+function normalize(str){
+  if(!str) return "";
+  let s = str.normalize("NFKC");
+  s = toReadingForm(s);
+  s = s.replace(/[\s　。、！？!?,\.「」『』・～~"'"'（）()]/g, "");
+  return s;
+}
+
+/* ---- 레벤슈타인 거리 ---- */
+function levenshtein(a, b){
+  const al = a.length, bl = b.length;
+  if(al === 0) return bl;
+  if(bl === 0) return al;
+  const dp = new Array(bl + 1);
+  for(let j = 0; j <= bl; j++) dp[j] = j;
+  for(let i = 1; i <= al; i++){
+    let prev = dp[0];
+    dp[0] = i;
+    for(let j = 1; j <= bl; j++){
+      const tmp = dp[j];
+      dp[j] = Math.min(
+        dp[j] + 1,
+        dp[j-1] + 1,
+        prev + (a[i-1] === b[j-1] ? 0 : 1)
+      );
+      prev = tmp;
+    }
+  }
+  return dp[bl];
+}
+
+/* ---- 점수 계산 (0~100) ---- */
+function scoreOf(target, heard){
+  const t = normalize(target);
+  const h = normalize(heard);
+  if(t.length === 0) return 0;
+  const dist = levenshtein(t, h);
+  const maxLen = Math.max(t.length, h.length);
+  const sim = Math.max(0, 1 - dist / maxLen);
+  return Math.round(sim * 100);
+}
+
+/* ---- 최장 공통 부분수열 기반 diff 표시(정답 문장 기준으로 맞은 글자 강조) ---- */
+function diffHighlight(target, heard){
+  const t = normalize(target);
+  const h = normalize(heard);
+  const tl = t.length, hl = h.length;
+  const dp = Array.from({length:tl+1}, () => new Array(hl+1).fill(0));
+  for(let i=1;i<=tl;i++){
+    for(let j=1;j<=hl;j++){
+      dp[i][j] = t[i-1]===h[j-1] ? dp[i-1][j-1]+1 : Math.max(dp[i-1][j], dp[i][j-1]);
+    }
+  }
+  let i=tl, j=hl;
+  const matched = new Array(tl).fill(false);
+  while(i>0 && j>0){
+    if(t[i-1]===h[j-1]){ matched[i-1]=true; i--; j--; }
+    else if(dp[i-1][j] >= dp[i][j-1]) i--;
+    else j--;
+  }
+  let out = "";
+  for(let k=0;k<tl;k++){
+    out += matched[k] ? `<span class="m">${t[k]}</span>` : `<span class="x">${t[k]}</span>`;
+  }
+  return out;
+}
+
+/* =========================================================================
+   로그인 세션
+   ========================================================================= */
+function studentKey(s){ return (s.id + "_" + s.name).replace(/\s+/g,""); }
+
+function loadStudent(){
+  try{
+    const raw = localStorage.getItem(LS_STUDENT);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+
+function initMain(){
+  $("#whoBadge").textContent = student ? (student.name + " (" + student.id + ")") : "";
+  loadCategory();
+  renderHistory();
+}
+
+$("#btnLogout").addEventListener("click", () => {
+  if(!confirm("다른 학생으로 전환할까요? (내 기록은 이 브라우저에 그대로 남아있어요)")) return;
+  localStorage.removeItem(LS_STUDENT);
+  location.href = "index.html";
+});
+
+/* =========================================================================
+   탭 전환
+   ========================================================================= */
+$("#tabPractice").addEventListener("click", () => switchTab("practice"));
+$("#tabHistory").addEventListener("click", () => switchTab("history"));
+function switchTab(name){
+  const isP = name === "practice";
+  $("#tabPractice").classList.toggle("active", isP);
+  $("#tabHistory").classList.toggle("active", !isP);
+  $("#panel-practice").style.display = isP ? "" : "none";
+  $("#panel-history").style.display = isP ? "none" : "";
+  if(!isP) renderHistory();
+}
+
+/* =========================================================================
+   카테고리 선택 & 순차 진행(통과제) UI
+   ========================================================================= */
+function getCategoryList(){
+  return [...new Set(ACTIVE_SENTENCES.map(s => s.category))];
+}
+function getSentencesForCategory(cat){
+  return ACTIVE_SENTENCES.filter(s => s.category === cat);
+}
+function sentenceId(item){
+  return item.category + "||" + item.jp;
+}
+
+/* ---- 통과 기록(카테고리별 진행 상황) 저장소 ---- */
+function passedKey(){ return LS_PASSED_PREFIX + studentKey(student); }
+function getPassedSet(){
+  try{
+    const raw = localStorage.getItem(passedKey());
+    return new Set(raw ? JSON.parse(raw) : []);
+  }catch(e){ return new Set(); }
+}
+function savePassedSet(set){
+  localStorage.setItem(passedKey(), JSON.stringify([...set]));
+}
+function markPassed(id){
+  const set = getPassedSet();
+  set.add(id);
+  savePassedSet(set);
+}
+function findFirstUnpassed(cat){
+  const list = getSentencesForCategory(cat);
+  const passed = getPassedSet();
+  const candidate = list.find(item => !passed.has(sentenceId(item)) && !skippedIds.has(sentenceId(item)));
+  if(candidate) return candidate;
+  // 이번 세션에서 건너뛴 문장만 남았다면, 다시 처음부터 도전할 수 있도록 순환시킨다.
+  return list.find(item => !passed.has(sentenceId(item))) || null;
+}
+function countPassedInCategory(cat){
+  const list = getSentencesForCategory(cat);
+  const passed = getPassedSet();
+  return list.filter(item => passed.has(sentenceId(item))).length;
+}
+/* ---- 모든 카테고리의 모든 문장을 다 통과했는지 확인 (축패스 화면 이동 기준) ---- */
+function isEverythingPassed(){
+  if(ACTIVE_SENTENCES.length === 0) return false;
+  const passed = getPassedSet();
+  return ACTIVE_SENTENCES.every(item => passed.has(sentenceId(item)));
+}
+
+function populateCategories(){
+  const cats = getCategoryList();
+  const sel = $("#selCategory");
+  sel.innerHTML = cats.map(c => `<option value="${c}">${c}</option>`).join("");
+  sel.addEventListener("change", loadCategory);
+}
+
+/* 현재 선택된 카테고리를 기준으로, 아직 통과하지 못한 첫 문장을 보여주거나
+   전부 통과했다면 축하 카드를 보여준다. */
+function loadCategory(){
+  if(!student) return;
+  const cat = $("#selCategory").value;
+  renderProgress(cat);
+
+  const item = findFirstUnpassed(cat);
+  if(item){
+    $("#practiceCard").style.display = "";
+    $("#completeCard").style.display = "none";
+    setCurrentSentence(item.jp, item.ko, sentenceId(item));
+  }else{
+    $("#practiceCard").style.display = "none";
+    showCategoryComplete(cat);
+  }
+}
+
+function renderProgress(cat){
+  const total = getSentencesForCategory(cat).length;
+  const passed = countPassedInCategory(cat);
+  $("#progressText").textContent = `${passed} / ${total} 문장 통과`;
+  $("#progressBarFill").style.width = (total ? Math.round(passed/total*100) : 0) + "%";
+}
+
+function showCategoryComplete(cat){
+  const cats = getCategoryList();
+  const idx = cats.indexOf(cat);
+  const nextCat = cats[idx+1];
+
+  $("#completeCard").style.display = "";
+  if(nextCat){
+    $("#completeTitle").textContent = `'${cat}' 카테고리를 모두 통과했어요!`;
+    $("#completeDesc").textContent = "정말 잘했어요! 다음 카테고리에 도전해볼까요?";
+    $("#btnNextCategory").style.display = "";
+    $("#btnNextCategory").textContent = `다음 카테고리(${nextCat})로 이동 →`;
+  }else{
+    $("#completeTitle").textContent = "모든 카테고리를 통과했어요! 🏆";
+    $("#completeDesc").textContent = "모든 문장을 다 익혔어요. 정말 대단해요!";
+    $("#btnNextCategory").style.display = "none";
+  }
+}
+
+$("#btnNextCategory").addEventListener("click", () => {
+  const cats = getCategoryList();
+  const idx = cats.indexOf($("#selCategory").value);
+  const nextCat = cats[idx+1];
+  if(!nextCat) return;
+  $("#selCategory").value = nextCat;
+  loadCategory();
+});
+
+$("#btnRetryCategory").addEventListener("click", () => {
+  const cat = $("#selCategory").value;
+  if(!confirm(`'${cat}' 카테고리의 통과 기록을 초기화하고 처음부터 다시 연습할까요?`)) return;
+  const set = getPassedSet();
+  getSentencesForCategory(cat).forEach(item => set.delete(sentenceId(item)));
+  savePassedSet(set);
+  loadCategory();
+});
+
+function setCurrentSentence(jpHtml, ko, id){
+  currentSentence = { jp: jpHtml, ko: ko || "", plain: stripRuby(jpHtml), id: id || null };
+  wrongStreak = 0;
+  $("#curJp").innerHTML = jpHtml;
+  $("#curKo").textContent = ko || "";
+  $("#resultArea").innerHTML = "";
+  $("#micStatus").textContent = "마이크를 눌러 따라 말해보세요";
+}
+
+/* =========================================================================
+   모범 발음 듣기 (TTS)
+   ========================================================================= */
+const TTS_UNSUPPORTED_MSG = "이 브라우저는 발음 듣기 기능을 지원하지 않아요. Google Chrome(PC 또는 안드로이드)에서 접속해 주세요.";
+const TTS_FAILED_MSG = "발음 재생에 실패했어요. 다른 브라우저(Chrome 권장)에서 다시 시도해 주세요.";
+
+$("#btnListen").addEventListener("click", () => {
+  if(!currentSentence){ alert("먼저 문장을 선택해 주세요."); return; }
+  if(!("speechSynthesis" in window)){ alert(TTS_UNSUPPORTED_MSG); return; }
+  const utter = new SpeechSynthesisUtterance(currentSentence.plain);
+  utter.lang = "ja-JP";
+  utter.rate = 0.9;
+  utter.onerror = () => { alert(TTS_FAILED_MSG); };
+  try{
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utter);
+  }catch(err){
+    alert(TTS_FAILED_MSG);
+  }
+});
+
+/* =========================================================================
+   음성 인식 (Web Speech API)
+   ========================================================================= */
+const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+const MIC_UNSUPPORTED_MSG = "⚠️ 이 브라우저는 음성 인식을 지원하지 않아요. Google Chrome(PC 또는 안드로이드)에서 접속해 주세요. (iPhone Safari는 지원되지 않습니다)";
+
+function initSpeechWarning(){
+  if(!SpeechRecognitionAPI){
+    $("#micWarnCard").style.display = "";
+    $("#micWarnText").textContent = MIC_UNSUPPORTED_MSG;
+    $("#btnMic").disabled = true;
+    $("#btnMic").style.opacity = "0.4";
+    alert(MIC_UNSUPPORTED_MSG);
+  }
+}
+
+$("#btnMic").addEventListener("click", () => {
+  if(!SpeechRecognitionAPI){ return; }
+  if(!currentSentence){ alert("먼저 연습할 문장을 선택해 주세요."); return; }
+  if(listening){ stopListening(); return; }
+  startListening();
+});
+
+function startListening(){
+  recognition = new SpeechRecognitionAPI();
+  recognition.lang = "ja-JP";
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  listening = true;
+  $("#btnMic").classList.add("listening");
+  $("#micStatus").textContent = "듣고 있어요... 문장을 말해보세요";
+  $("#resultArea").innerHTML = "";
+
+  recognition.onresult = (e) => {
+    const heard = e.results[0][0].transcript;
+    handleResult(heard);
+  };
+  recognition.onerror = (e) => {
+    stopListening();
+    let msg = "음성 인식 중 오류가 발생했어요. 다시 시도해 주세요.";
+    let popup = null;
+    if(e.error === "not-allowed" || e.error === "service-not-allowed"){
+      msg = "마이크 사용 권한을 허용해 주세요.";
+      popup = "마이크 사용 권한이 차단되어 있어요. 브라우저 주소창 옆 아이콘에서 마이크 권한을 허용한 뒤 다시 시도해 주세요.";
+    } else if(e.error === "no-speech"){
+      msg = "음성이 감지되지 않았어요. 다시 눌러서 말해보세요.";
+    } else if(e.error === "audio-capture"){
+      msg = "마이크를 찾을 수 없어요.";
+      popup = "마이크를 찾을 수 없어요. 마이크가 연결되어 있는지, 다른 프로그램에서 사용 중이지 않은지 확인해 주세요.";
+    } else if(e.error === "language-not-supported"){
+      msg = "이 브라우저는 일본어 음성 인식을 지원하지 않아요.";
+      popup = "이 브라우저는 일본어 음성 인식을 지원하지 않아요. Google Chrome(PC 또는 안드로이드)에서 다시 시도해 주세요.";
+    } else if(e.error === "network"){
+      msg = "네트워크 오류로 음성 인식에 실패했어요.";
+      popup = "네트워크 오류로 음성 인식에 실패했어요. 인터넷 연결을 확인하거나 다른 브라우저(Chrome 권장)에서 다시 시도해 주세요.";
+    } else if(e.error !== "aborted"){
+      popup = "음성 인식 중 오류가 발생했어요. 계속되면 다른 브라우저(Chrome 권장)에서 다시 시도해 주세요.";
+    }
+    $("#micStatus").textContent = msg;
+    if(popup) alert(popup);
+  };
+  recognition.onend = () => { stopListening(); };
+
+  try{ recognition.start(); }catch(err){ stopListening(); alert(MIC_UNSUPPORTED_MSG); }
+}
+function stopListening(){
+  listening = false;
+  $("#btnMic").classList.remove("listening");
+  if(recognition){ try{ recognition.stop(); }catch(e){} }
+}
+
+/* =========================================================================
+   채점 결과 처리 및 기록 저장/전송
+   ========================================================================= */
+function handleResult(heardText){
+  const target = currentSentence.plain;
+  const score = scoreOf(target, heardText);
+  const pass = score >= CONFIG.PASS_THRESHOLD;
+  const diffHtml = diffHighlight(target, heardText);
+
+  $("#micStatus").textContent = "마이크를 눌러 다시 연습해보세요";
+
+  const record = {
+    ts: new Date().toISOString(),
+    studentId: student.id,
+    studentName: student.name,
+    sentence: target,
+    recognized: heardText,
+    score: score,
+    pass: pass
+  };
+  saveLocalRecord(record);
+  sendToSheet(record);
+
+  const isTracked = !!currentSentence.id;
+  if(pass && isTracked){
+    markPassed(currentSentence.id);
+    renderProgress($("#selCategory").value);
+    wrongStreak = 0;
+  }
+
+  let autoAdvance = false;
+  if(!pass){
+    wrongStreak++;
+    if(isTracked && wrongStreak >= WRONG_STREAK_LIMIT){
+      skippedIds.add(currentSentence.id);
+      wrongStreak = 0;
+      autoAdvance = true;
+    }
+  }
+
+  const finished = pass && isTracked && isEverythingPassed();
+  renderResult(pass, score, diffHtml, heardText, isTracked, autoAdvance, finished);
+
+  if(finished){
+    setTimeout(() => { location.href = "finish.html"; }, 1400);
+  }else if(autoAdvance){
+    setTimeout(loadCategory, 1600);
+  }
+}
+
+function renderResult(pass, score, diffHtml, heardText, isTracked, autoAdvance, finished){
+  const cls = pass ? "pass" : "retry";
+  const label = pass ? "✅ 통과!" : (autoAdvance ? "❌ 오답 (3회 연속)" : "🔁 다시 도전!");
+  const advanceBtn = (pass && isTracked && !finished)
+    ? `<button class="btn btn-primary" id="btnAdvance" style="margin-top:14px;">다음 문장 보기 →</button>`
+    : "";
+  const autoAdvanceNote = autoAdvance
+    ? `<div class="small-note" style="color:var(--bad);font-weight:700;">3번 연속 오답이라 오답으로 기록하고 잠시 후 다음 문장으로 넘어갈게요...</div>`
+    : "";
+  const finishedNote = finished
+    ? `<div class="small-note" style="color:var(--good);font-weight:700;">🎉 모든 문장을 다 익혔어요! 잠시 후 축하 화면으로 이동할게요...</div>`
+    : "";
+  $("#resultArea").innerHTML = `
+    <div class="result-card ${cls}">
+      <div class="result-top">
+        <div class="result-badge ${cls}">${label}</div>
+        <div class="score-num">${score}<span style="font-size:14px;">%</span></div>
+      </div>
+      <div class="diff-line">${diffHtml}</div>
+      <div class="heard-label">내가 말한 것으로 인식된 내용</div>
+      <div style="font-size:14px;color:var(--sub);">${heardText || "(인식된 내용 없음)"}</div>
+      <div class="small-note">초록색: 정답과 일치 · 빨간색: 정답과 다름 (기준: ${CONFIG.PASS_THRESHOLD}% 이상 통과)</div>
+      <div class="sync-note"><span class="dot-sync ${CONFIG.APPS_SCRIPT_URL ? "pending" : ""}" id="syncDot"></span><span id="syncText">${CONFIG.APPS_SCRIPT_URL ? "구글시트로 전송 중..." : "이 기기에만 저장됨 (구글시트 연동 미설정)"}</span></div>
+      ${autoAdvanceNote}
+      ${finishedNote}
+      ${advanceBtn}
+    </div>
+  `;
+  if(pass && isTracked && !finished){
+    $("#btnAdvance").addEventListener("click", loadCategory);
+  }
+}
+
+/* ---- 로컬 기록 저장 ---- */
+function historyKey(){ return LS_HISTORY_PREFIX + studentKey(student); }
+function getLocalHistory(){
+  try{
+    const raw = localStorage.getItem(historyKey());
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){ return []; }
+}
+function saveLocalRecord(record){
+  const hist = getLocalHistory();
+  hist.push(record);
+  localStorage.setItem(historyKey(), JSON.stringify(hist));
+}
+
+/* ---- 구글시트 전송 (Google Apps Script 웹앱, no-cors 방식) ---- */
+function sendToSheet(record){
+  if(!CONFIG.APPS_SCRIPT_URL){ return; }
+  postRecord(record).then(() => {
+    markSyncDot(true);
+  }).catch(() => {
+    queuePending(record);
+    markSyncDot(false);
+  });
+  flushPending();
+}
+function markSyncDot(ok){
+  const dot = document.getElementById("syncDot");
+  const text = document.getElementById("syncText");
+  if(!dot) return;
+  dot.classList.remove("pending");
+  dot.classList.add(ok ? "ok" : "");
+  if(text) text.textContent = ok ? "구글시트에 저장 완료" : "전송 실패 - 다음 접속 시 자동 재전송";
+}
+function postRecord(record){
+  return fetch(CONFIG.APPS_SCRIPT_URL, {
+    method: "POST",
+    mode: "no-cors",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(record)
+  });
+  // no-cors 모드에서는 응답 내용을 읽을 수 없어 성공 여부를 확실히 알 수 없지만,
+  // 네트워크 오류가 없다면 정상적으로 스프레드시트에 기록됩니다.
+}
+function queuePending(record){
+  let pending = [];
+  try{ pending = JSON.parse(localStorage.getItem(LS_PENDING) || "[]"); }catch(e){}
+  pending.push(record);
+  localStorage.setItem(LS_PENDING, JSON.stringify(pending));
+}
+function flushPending(){
+  if(!CONFIG.APPS_SCRIPT_URL) return;
+  let pending = [];
+  try{ pending = JSON.parse(localStorage.getItem(LS_PENDING) || "[]"); }catch(e){}
+  if(pending.length === 0) return;
+  localStorage.setItem(LS_PENDING, "[]");
+  pending.forEach(r => { postRecord(r).catch(() => queuePending(r)); });
+}
+
+/* =========================================================================
+   구글시트(문제은행 탭)에서 연습 문장 목록 실시간 불러오기
+   실패하거나 구글시트 연동이 설정되어 있지 않으면 questions.js의 기본 목록을 그대로 사용한다.
+   ========================================================================= */
+function loadSentencesFromSheet(){
+  if(!CONFIG.APPS_SCRIPT_URL) return Promise.resolve(false);
+  const controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), 6000) : null;
+  return fetch(CONFIG.APPS_SCRIPT_URL + "?action=sentences", {
+    method: "GET",
+    signal: controller ? controller.signal : undefined
+  }).then(res => {
+    if(timer) clearTimeout(timer);
+    if(!res.ok) return false;
+    return res.json();
+  }).then(data => {
+    if(!Array.isArray(data) || data.length === 0) return false;
+    const valid = data.every(item => item && typeof item.category === "string" && typeof item.jp === "string");
+    if(!valid) return false;
+    ACTIVE_SENTENCES = data.map(item => ({ category: item.category, jp: item.jp, ko: item.ko || "" }));
+    refreshReadingMap();
+    return true;
+  }).catch(() => {
+    if(timer) clearTimeout(timer);
+    return false;
+  });
+}
+
+/* =========================================================================
+   구글시트(한자읽기 탭)에서 한자→히라가나 보정 사전 실시간 불러오기
+   실패하거나 구글시트 연동이 설정되어 있지 않으면 위 READING_OVERRIDES_DEFAULT를 그대로 사용한다.
+   ========================================================================= */
+function loadReadingOverridesFromSheet(){
+  if(!CONFIG.APPS_SCRIPT_URL) return Promise.resolve(false);
+  const controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), 6000) : null;
+  return fetch(CONFIG.APPS_SCRIPT_URL + "?action=readings", {
+    method: "GET",
+    signal: controller ? controller.signal : undefined
+  }).then(res => {
+    if(timer) clearTimeout(timer);
+    if(!res.ok) return false;
+    return res.json();
+  }).then(data => {
+    if(!Array.isArray(data) || data.length === 0) return false;
+    const valid = data.every(item => item && typeof item.kanji === "string" && typeof item.reading === "string");
+    if(!valid) return false;
+    const map = {};
+    data.forEach(item => { if(item.kanji) map[item.kanji] = item.reading; });
+    ACTIVE_READING_OVERRIDES = map;
+    refreshReadingMap();
+    return true;
+  }).catch(() => {
+    if(timer) clearTimeout(timer);
+    return false;
+  });
+}
+
+/* =========================================================================
+   기록 탭 렌더링
+   ========================================================================= */
+function renderHistory(){
+  if(!student) return;
+  const hist = getLocalHistory();
+  const count = hist.length;
+  const avg = count ? Math.round(hist.reduce((a,r)=>a+r.score,0)/count) : 0;
+  const best = count ? Math.max(...hist.map(r=>r.score)) : 0;
+
+  $("#statCount").textContent = count;
+  $("#statAvg").textContent = avg + "%";
+  $("#statBest").textContent = best + "%";
+
+  drawTrend(hist);
+
+  if(count === 0){
+    $("#historyTableWrap").innerHTML = `<div class="empty">아직 연습 기록이 없어요. '연습하기' 탭에서 첫 문장을 말해보세요!</div>`;
+    return;
+  }
+
+  const rows = hist.slice().reverse().slice(0, 50).map(r => {
+    const d = new Date(r.ts);
+    const dateStr = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    const color = r.pass ? "var(--good)" : "var(--bad)";
+    return `<tr>
+      <td>${dateStr}</td>
+      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.sentence}</td>
+      <td class="score-cell" style="color:${color}">${r.score}%</td>
+    </tr>`;
+  }).join("");
+
+  $("#historyTableWrap").innerHTML = `
+    <table>
+      <thead><tr><th>날짜</th><th>문장</th><th>점수</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function drawTrend(hist){
+  const canvas = document.getElementById("trendCanvas");
+  const ctx = canvas.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth || 300;
+  const cssH = 140;
+  canvas.width = cssW * dpr; canvas.height = cssH * dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,cssW,cssH);
+
+  if(hist.length === 0) return;
+
+  const data = hist.slice(-20).map(r=>r.score);
+  const padL = 30, padR = 10, padT = 14, padB = 20;
+  const w = cssW - padL - padR, h = cssH - padT - padB;
+
+  ctx.strokeStyle = "#ece4dd";
+  ctx.lineWidth = 1;
+  [0,25,50,75,100].forEach(v => {
+    const y = padT + h - (v/100)*h;
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(cssW-padR,y); ctx.stroke();
+    ctx.fillStyle = "#a89e95"; ctx.font = "10px sans-serif";
+    ctx.fillText(v+"%", 2, y+3);
+  });
+
+  // 통과선
+  const passY = padT + h - (CONFIG.PASS_THRESHOLD/100)*h;
+  ctx.strokeStyle = "#e0a12a";
+  ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(padL,passY); ctx.lineTo(cssW-padR,passY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 점수 라인
+  ctx.strokeStyle = "#dc4c3f";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  data.forEach((v,i) => {
+    const x = data.length === 1 ? padL : padL + (i/(data.length-1))*w;
+    const y = padT + h - (v/100)*h;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+
+  ctx.fillStyle = "#dc4c3f";
+  data.forEach((v,i) => {
+    const x = data.length === 1 ? padL : padL + (i/(data.length-1))*w;
+    const y = padT + h - (v/100)*h;
+    ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fill();
+  });
+}
+
+/* =========================================================================
+   초기화
+   ========================================================================= */
+async function init(){
+  student = loadStudent();
+  if(!student){ location.replace("index.html"); return; }
+
+  initSpeechWarning();
+  // 성공하면 구글시트 최신 내용, 실패해도 각각 questions.js / READING_OVERRIDES_DEFAULT로 계속 진행
+  await Promise.all([loadSentencesFromSheet(), loadReadingOverridesFromSheet()]);
+  populateCategories();
+  initMain();
+  flushPending();
+  window.addEventListener("resize", () => { if(student) drawTrend(getLocalHistory()); });
+}
+init();
+
+})();
+</script>
+</body>
+</html>

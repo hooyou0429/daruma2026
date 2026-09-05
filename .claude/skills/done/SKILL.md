@@ -34,7 +34,7 @@ description: Commit and push the current changes in C:\일본어연습 (the daru
 
 4. **커밋 메시지 작성**
    이번 세션 대화 내용을 돌아보고, 실제로 무엇을 했는지 1~3줄 정도의 한국어 문장으로 요약한다. 예:
-   - `Questions.js에 3단원 어휘 문제 20개 추가`
+   - `questions.js에 3단원 어휘 문제 20개 추가`
    - `index.html 다루마 애니메이션 타이밍 버그 수정, README 업데이트`
 
    대화 내용만으로 부족하면 `git diff --staged`로 실제 변경분을 훑어보고 그걸 근거로 쓴다.
