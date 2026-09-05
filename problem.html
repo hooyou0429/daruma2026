@@ -364,11 +364,14 @@ function countPassedInCategory(cat){
   const passed = getPassedSet();
   return list.filter(item => passed.has(sentenceId(item))).length;
 }
-/* ---- 모든 카테고리의 모든 문장을 다 통과했는지 확인 (축패스 화면 이동 기준) ---- */
-function isEverythingPassed(){
-  if(ACTIVE_SENTENCES.length === 0) return false;
-  const passed = getPassedSet();
-  return ACTIVE_SENTENCES.every(item => passed.has(sentenceId(item)));
+/* ---- 마지막 카테고리(목록 맨 끝)를 방금 모두 통과했는지 확인 (축패스 화면 이동 기준)
+   다른 카테고리를 다 안 끝냈어도, "마지막 카테고리" 하나를 다 통과하면 축패스로 이동한다.
+   (기존 showCategoryComplete의 "다음 카테고리 없음" 판정과 동일한 기준) ---- */
+function isLastCategoryFullyPassed(cat){
+  const cats = getCategoryList();
+  const lastCat = cats[cats.length - 1];
+  if(!lastCat || cat !== lastCat) return false;
+  return !findFirstUnpassed(cat);
 }
 
 function populateCategories(){
@@ -581,7 +584,7 @@ function handleResult(heardText){
     }
   }
 
-  const finished = pass && isTracked && isEverythingPassed();
+  const finished = pass && isTracked && isLastCategoryFullyPassed($("#selCategory").value);
   renderResult(pass, score, diffHtml, heardText, isTracked, autoAdvance, finished);
 
   if(finished){
