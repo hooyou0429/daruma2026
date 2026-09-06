@@ -378,8 +378,8 @@ function populateCategories(){
   const cats = getCategoryList();
   const sel = $("#selCategory");
   sel.innerHTML = cats.map(c => `<option value="${c}">${c}</option>`).join("");
-  sel.addEventListener("change", loadCategory);
 }
+$("#selCategory").addEventListener("change", loadCategory);
 
 /* 현재 선택된 카테고리를 기준으로, 아직 통과하지 못한 첫 문장을 보여주거나
    전부 통과했다면 축하 카드를 보여준다. */
@@ -837,17 +837,26 @@ function drawTrend(hist){
 /* =========================================================================
    초기화
    ========================================================================= */
-async function init(){
+function init(){
   student = loadStudent();
   if(!student){ location.replace("index.html"); return; }
 
   initSpeechWarning();
-  // 성공하면 구글시트 최신 내용, 실패해도 각각 questions.js / READING_OVERRIDES_DEFAULT로 계속 진행
-  await Promise.all([loadSentencesFromSheet(), loadReadingOverridesFromSheet()]);
+  // questions.js 기본값으로 카테고리를 즉시 표시해 구글시트 응답을 기다리느라 화면이 늦게 뜨는 것을 방지.
+  // 구글시트가 더 최신 내용을 갖고 있으면 응답 도착 후 백그라운드에서 갱신한다.
   populateCategories();
   initMain();
   flushPending();
   window.addEventListener("resize", () => { if(student) drawTrend(getLocalHistory()); });
+
+  Promise.all([loadSentencesFromSheet(), loadReadingOverridesFromSheet()]).then(([sentencesUpdated]) => {
+    if(!sentencesUpdated) return;
+    const prevCat = $("#selCategory").value;
+    populateCategories();
+    const cats = getCategoryList();
+    $("#selCategory").value = cats.includes(prevCat) ? prevCat : (cats[0] || "");
+    loadCategory();
+  });
 }
 init();
 
