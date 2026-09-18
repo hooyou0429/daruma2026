@@ -666,9 +666,12 @@ function flushPending(){
 function loadSentencesFromSheet(){
   if(!CONFIG.APPS_SCRIPT_URL) return Promise.resolve(false);
   const controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
-  const timer = controller ? setTimeout(() => controller.abort(), 6000) : null;
-  return fetch(CONFIG.APPS_SCRIPT_URL + "?action=sentences", {
+  const timer = controller ? setTimeout(() => controller.abort(), 15000) : null;
+  // 캐시 버스팅: 매 요청마다 URL을 다르게 만들어 브라우저/Google 쪽 캐시가 예전 응답을
+  // 재사용하지 못하게 한다(시트를 수정했는데 반영이 안 되는 문제 방지).
+  return fetch(CONFIG.APPS_SCRIPT_URL + "?action=sentences&_ts=" + Date.now(), {
     method: "GET",
+    cache: "no-store",
     signal: controller ? controller.signal : undefined
   }).then(res => {
     if(timer) clearTimeout(timer);
@@ -694,9 +697,12 @@ function loadSentencesFromSheet(){
 function loadReadingOverridesFromSheet(){
   if(!CONFIG.APPS_SCRIPT_URL) return Promise.resolve(false);
   const controller = (typeof AbortController !== "undefined") ? new AbortController() : null;
-  const timer = controller ? setTimeout(() => controller.abort(), 6000) : null;
-  return fetch(CONFIG.APPS_SCRIPT_URL + "?action=readings", {
+  const timer = controller ? setTimeout(() => controller.abort(), 15000) : null;
+  // 캐시 버스팅: 매 요청마다 URL을 다르게 만들어 브라우저/Google 쪽 캐시가 예전 응답을
+  // 재사용하지 못하게 한다(시트를 수정했는데 반영이 안 되는 문제 방지).
+  return fetch(CONFIG.APPS_SCRIPT_URL + "?action=readings&_ts=" + Date.now(), {
     method: "GET",
+    cache: "no-store",
     signal: controller ? controller.signal : undefined
   }).then(res => {
     if(timer) clearTimeout(timer);
